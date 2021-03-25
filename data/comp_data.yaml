@@ -1,7 +1,7 @@
 # train and val data as 1) directory: path/images/, 2) file: path/images.txt, or 3) list: [path1/images/, path2/images/]
-train: /content/drive/Shareddrives/AImX-Challenge/Training/DatasetYoloFormat/comp_data/images/train
-val: /content/drive/Shareddrives/AImX-Challenge/Training/DatasetYoloFormat/comp_data/images/val
-test: /content/drive/Shareddrives/AImX-Challenge/Training/DatasetYoloFormat/comp_data/images/test
+train: /content/comp_data/images/train
+val: /content/comp_data/images/val
+test: /content/omp_data/images/test
 
 # number of classes
 nc: 5
