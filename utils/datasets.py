@@ -301,7 +301,8 @@ class LoadStreams:  # multiple IP or RTSP cameras
         for i, s in enumerate(sources):
             # Start the thread to read frames from the video stream
             print(f'{i + 1}/{n}: {s}... ', end='')
-            cap = cv2.VideoCapture(gstreamer_pipeline(flip_method=1))
+            #cap = cv2.VideoCapture(gstreamer_pipeline(flip_method=1))
+            cap = cv2.VideoCapture(eval(s) if s.isnumeric() else s)
             assert cap.isOpened(), f'Failed to open {s}'
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -338,7 +339,7 @@ class LoadStreams:  # multiple IP or RTSP cameras
     def __next__(self):
         self.count += 1
         img0 = self.imgs.copy()
-        if cv2.waitKey(1) == ord('q'):  # q to quit
+        if cv2.waitKey(1) == ord('q'):  # q to quit this is it
             cv2.destroyAllWindows()
             raise StopIteration
 
