@@ -165,16 +165,15 @@ def detect_async(opt, save_img=False):
 
 @app.route('/coordinates', methods=['PUT'])
 def result():
-    print(request.get_json())
-    # print(request.form.get('long'))
-    # print(request.form.get('lat'))
-    # print(request.form.get('name'))
-    #print(request.form['lat'])
-    #print(coor_lat, coor_long)
     global coor_lat
     global coor_long
-    coor_lat+=1
-    coor_long+=1
+    lat_ = request.form.get('lat')
+    long_ = request.form.get('long')
+    print(lat_,long_)
+    if(lat_):
+        coor_lat = lat_
+    if(long_):
+        coor_long = long_
     return 'done'
 
 
