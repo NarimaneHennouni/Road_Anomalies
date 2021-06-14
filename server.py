@@ -1,5 +1,8 @@
-from flask import Flask, request
-from yolo.detect import *
+import sys, os
+sys.path.append('./yolo')
+
+from flask import Flask, request, jsonify
+#from yolo.detect import *
 import threading
 
 import argparse
@@ -32,7 +35,15 @@ all_trips = trips_management.read_all_trips(TRIPS_FOLDER)
 coor_lat = 0
 coor_long = 0
 print(coor_long)
-def detect_async(opt, save_img=False):
+
+
+def return_error(msg, code):
+    return jsonify({
+                    'error' : True, 
+                    'message' : msg
+                }),code
+
+def detect_async(opt, file_save, save_img=False):
     source, weights, view_img, save_txt, imgsz = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
         ('rtsp://', 'rtmp://', 'http://'))
@@ -170,18 +181,20 @@ def detect_async(opt, save_img=False):
 def result():
     global coor_lat
     global coor_long
-    lat_ = request.form.get('lat')
-    long_ = request.form.get('long')
+    request_json = request.get_json()
+    lat_ = request_json.get('lat', None)
+    long_ = request_json.get('long', None)
+
     print(lat_,long_)
     if(lat_):
         coor_lat = lat_
     if(long_):
         coor_long = long_
-    return 'done'
+    return jsonify({'message':'done'})
 
 
 @app.route('/detect', methods=['GET'])
-def detect():
+def detect(id):
     if(exit_detect_event.is_set()):
         exit_detect_event.clear()
         parser = argparse.ArgumentParser()
@@ -204,13 +217,14 @@ def detect():
         opt = parser.parse_args()
         print(opt)
         check_requirements()
+        file_save = id + '.csv'
         with torch.no_grad():
             if opt.update:  # update all models (to fix SourceChangeWarning)
                 for opt.weights in ['yolov5s.pt', 'yolov5m.pt', 'yolov5l.pt', 'yolov5x.pt']:
-                    thread_detect = threading.Thread(target=detect_async,args=(opt,))
+                    thread_detect = threading.Thread(target=detect_async,args=(opt, file_save,))
                     strip_optimizer(opt.weights)
             else:
-                thread_detect = threading.Thread(target=detect_async, args=(opt,))
+                thread_detect = threading.Thread(target=detect_async, args=(opt, file_save,))
                 
         
         thread_detect.start()
@@ -227,12 +241,55 @@ def stop_detect():
     else:
         return 'no detection executing'
 
-@app.route('/list_trips', methods=['GET'])
-def stop_detect():
-    if(not exit_detect_event.is_set()):
-        exit_detect_event.set()
-        return 'done'
-    else:
-        return 'no detection executing'
+@app.route('/trips', methods=['GET'])
+def list_trips():
+    return jsonify(all_trips)
 
-app.run(host= '0.0.0.0')
+
+@app.route('/trip/create', methods=['PUT'])
+def create_trip():
+    global all_trips
+    request_json = request.get_json()
+    name = request_json.get("name", None)
+    if name:
+        trips_management.create_trip(TRIPS_FOLDER, name)
+        all_trips = trips_management.read_all_trips(TRIPS_FOLDER)
+        return jsonify(
+                {
+                    'message' : 'Trip created'
+                })
+    return return_error('You have to provide a name', 404)
+
+@app.route('/trip/delete', methods=['PUT'])
+def delete_trip():
+    global all_trips
+    request_json = request.get_json()
+    id = request_json.get("id", None)
+    if id:
+        if trips_management.delete_trip(TRIPS_FOLDER, id):
+            all_trips = trips_management.read_all_trips(TRIPS_FOLDER)
+            return jsonify(
+                {
+                    'message' : 'Trip deleted'
+                })
+        else:
+            return return_error('The trip does not exist', 404)
+    return return_error('You have to provide an id', 404)
+
+@app.route('/trip/stats', methods=['GET'])
+def trip_stats():
+    id = request.args.get('id', default = None)
+    if id:
+        stats = trips_management.get_stats(TRIPS_FOLDER, id)
+        if stats:
+            return jsonify(
+                {
+                    'data' : stats
+                })
+        else:
+            return return_error('The trip does not exist', 404)
+    return return_error('You have to provide an id', 404)
+
+if __name__ == '__main__':
+    app.debug = True
+    app.run(host= '0.0.0.0')
