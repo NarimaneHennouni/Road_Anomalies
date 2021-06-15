@@ -30,13 +30,17 @@ current_thread_id = 0
 exit_detect_event = threading.Event()
 exit_detect_event.set()
 
+# get all trips
 TRIPS_FOLDER = './trips_data'
 all_trips = trips_management.read_all_trips(TRIPS_FOLDER)
+IMAGES_FOLDER = './trip_images_save'
 
+#initialize position global variables
 coor_lat = 0
 coor_long = 0
-print(coor_long)
 
+#model
+model_wights = 'yolov5s.pt'
 
 def return_error(msg, code):
     return jsonify({
@@ -44,15 +48,16 @@ def return_error(msg, code):
                     'message' : msg
                 }),code
 
-def detect_async(opt, file_save, save_img=False):
+def detect_async(opt, file_save, img_save_path = None, save_img=True):
     source, weights, view_img, save_txt, imgsz = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
-        ('rtsp://', 'rtmp://', 'http://'))
+        ('rtsp://', 'rtmp://', 'http://'))    
 
-    # Directories
-    save_dir = Path(increment_path(Path(opt.project) / opt.name, exist_ok=opt.exist_ok))  # increment run
-    save_dir.mkdir(parents=True, exist_ok=True)  # make dir
-
+    if save_img:
+        print(img_save_path)
+        img_save_dir = Path(img_save_path, exist_ok = True)  # increment run
+        img_save_dir.mkdir(parents = True, exist_ok = True)  # make dir
+    
     # Initialize
     set_logging()
     device = select_device(opt.device)
@@ -72,7 +77,6 @@ def detect_async(opt, file_save, save_img=False):
         modelc.load_state_dict(torch.load('weights/resnet101.pt', map_location=device)['model']).to(device).eval()
 
     # Set Dataloader
-    vid_path, vid_writer = None, None
     if webcam:
         view_img = check_imshow()
         cudnn.benchmark = True  # set True to speed up constant image size inference
@@ -89,8 +93,8 @@ def detect_async(opt, file_save, save_img=False):
     if device.type != 'cpu':
         model(torch.zeros(1, 3, imgsz, imgsz).to(device).type_as(next(model.parameters())))  # run once
     
-    txt_path = str(save_dir / 'labels')
     t0 = time.time()
+    counter = 0
     for path, img, im0s, vid_cap in dataset:
         img = torch.from_numpy(img).to(device)
         img = img.half() if half else img.float()  # uint8 to fp16/32
@@ -118,7 +122,6 @@ def detect_async(opt, file_save, save_img=False):
                 p, s, im0, frame = path, '', im0s, getattr(dataset, 'frame', 0)
 
             p = Path(p)  # to Path
-            save_path = str(save_dir / p.name)  # img.jpg
             s += '%gx%g ' % img.shape[2:]  # print string
             gn = torch.tensor(im0.shape)[[1, 0, 1, 0]]  # normalization gain whwh
             if len(det):
@@ -142,6 +145,10 @@ def detect_async(opt, file_save, save_img=False):
                     if save_img or view_img:  # Add bbox to image
                         label = f'{names[int(cls)]} {conf:.2f}'
                         plot_one_box(xyxy, im0, label=label, color=colors[int(cls)], line_thickness=3)
+                    
+                if save_img:
+                    cv2.imwrite(img_save_path + '/' + str(counter) + '.jpg', im0)
+                    counter += 1
 
             # Print time (inference + NMS)
             print(f'{s}Done. ({t2 - t1:.3f}s)')
@@ -150,30 +157,9 @@ def detect_async(opt, file_save, save_img=False):
             if view_img:
                 cv2.imshow(str(p), im0)
                 cv2.waitKey(1)  # 1 millisecond
-
-            # Save results (image with detections)
-            if save_img:
-                if dataset.mode == 'image':
-                    cv2.imwrite(save_path, im0)
-                else:  # 'video'
-                    if vid_path != save_path:  # new video
-                        vid_path = save_path
-                        if isinstance(vid_writer, cv2.VideoWriter):
-                            vid_writer.release()  # release previous video writer
-
-                        fourcc = 'mp4v'  # output video codec
-                        fps = vid_cap.get(cv2.CAP_PROP_FPS)
-                        w = int(vid_cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-                        h = int(vid_cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-                        vid_writer = cv2.VideoWriter(save_path, cv2.VideoWriter_fourcc(*fourcc), fps, (w, h))
-                    vid_writer.write(im0)
         
         if(exit_detect_event.is_set()):
             break
-
-    if save_txt or save_img:
-        s = f"\n{len(list(save_dir.glob('labels/*.txt')))} labels saved to {save_dir / 'labels'}" if save_txt else ''
-        print(f"Results saved to {save_dir}{s}")
 
     print(f'Done. ({time.time() - t0:.3f}s)')
         
@@ -199,10 +185,11 @@ def result():
 def detect():
     if(exit_detect_event.is_set()):
         id = request.args.get('id', default = None)
+        save_img = request.args.get('save_img', default = False)
         if id and id in all_trips:
             exit_detect_event.clear()
             parser = argparse.ArgumentParser()
-            parser.add_argument('--weights', nargs='+', type=str, default='yolov5s.pt', help='model.pt path(s)')
+            parser.add_argument('--weights', nargs='+', type=str, default=model_wights, help='model.pt path(s)')
             parser.add_argument('--source', type=str, default='0', help='source')  # file/folder, 0 for webcam
             parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
             parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
@@ -223,18 +210,19 @@ def detect():
             print(opt)
             check_requirements(file= 'yolo/requirements.txt')
             file_save = TRIPS_FOLDER + '/' + id +'.csv'
+            img_save_path = IMAGES_FOLDER + '/' + id
             with torch.no_grad():
                 if opt.update:  # update all models (to fix SourceChangeWarning)
                     for opt.weights in ['yolov5s.pt', 'yolov5m.pt', 'yolov5l.pt', 'yolov5x.pt']:
-                        thread_detect = threading.Thread(target=detect_async,args=(opt, file_save,))
+                        thread_detect = threading.Thread(target=detect_async,args=(opt, file_save, img_save_path, save_img,))
                         strip_optimizer(opt.weights)
                 else:
-                    thread_detect = threading.Thread(target=detect_async, args=(opt, file_save,))
+                    thread_detect = threading.Thread(target=detect_async, args=(opt, file_save, img_save_path, save_img,)) 
 
             thread_detect.start()
             return jsonify({'message':'done'})
-        else:
-            return return_error('The trip does not exist', 404)
+        else: return return_error('The trip does not exist', 404)
+    else: return return_error('There is a detection already', 404)
 
 @app.route('/stop_detect', methods=['GET'])
 def stop_detect():
@@ -292,6 +280,21 @@ def trip_stats():
         else:
             return return_error('The trip does not exist', 404)
     return return_error('You have to provide an id', 404)
+
+@app.route('/trip/image', methods=['GET'])
+def get_image():
+    id = request.args.get('id', default = None)
+    detection_number = request.args.get('detection_number', default = None)
+    if id and detection_number:
+        if id in all_trips:
+            image = trips_management.get_image(IMAGES_FOLDER, id, detection_number)
+            if image:
+                return image
+            else:
+                return return_error('The specified image does not exist', 404)
+        else:
+            return return_error('The trip does not exist', 404)
+    return return_error('You have to provide an id and a number', 404)
 
 if __name__ == '__main__':
     app.debug = True
