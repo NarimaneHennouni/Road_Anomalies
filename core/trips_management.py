@@ -44,11 +44,6 @@ def delete_trip(TRIPS_FOLDER, id):
     except OSError:
         return False
 
-def format_deetction_result(row):
-    return {
-        'class': row[0]
-    }
-
 def get_stats(TRIPS_FOLDER, id):
     try:
         df = pd.read_csv(TRIPS_FOLDER + '/' + id + '.csv')  
