@@ -1,5 +1,7 @@
 import os 
 from datetime import datetime
+import csv
+import pandas as pd
 
 def trip_name_to_numbers(file):
     file = file[:-4]
@@ -14,17 +16,20 @@ def get_file_name(name, date):
     return  name + '_' +date.strftime('%Y%m%d%H%M%S') + '.csv'
 
 def read_all_trips(TRIPS_FOLDER):
-    results = [] 
+    results = {}
     for file in os.listdir(TRIPS_FOLDER):
         if file.endswith(".csv"):
-            results.append(trip_name_to_numbers(file))
+            res = trip_name_to_numbers(file)
+            results[res['id']] = res
     return results
 
 def create_trip(TRIPS_FOLDER, name):
     date_ = datetime.now()
     file_name = get_file_name(name, date_)
-    with open(TRIPS_FOLDER + '/' + file_name, "w") as _:
-        pass
+    with open(TRIPS_FOLDER + '/' + file_name, "w") as f:
+        writer = csv.writer(f)
+        writer.writerow(('class', 'cor_1', 'cor_2', 'cor_3', 'cor_4', 'lat', 'long'))
+
     return {
         'id' : file_name[:-4],
         'name': name,
@@ -38,7 +43,17 @@ def delete_trip(TRIPS_FOLDER, id):
     except OSError:
         return False
 
+def format_deetction_result(row):
+    return {
+        'class': row[0]
+    }
+
 def get_stats(TRIPS_FOLDER, id):
-    pass
-    
+    try:
+        df = pd.read_csv(TRIPS_FOLDER + '/' + id + '.csv')  
+        return list(df.T.to_dict().values())  
+    except FileNotFoundError: 
+        return False
+   
+      
     

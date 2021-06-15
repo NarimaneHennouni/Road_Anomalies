@@ -21,6 +21,7 @@ from yolo.utils.general import check_img_size, check_requirements, check_imshow,
 from yolo.utils.plots import plot_one_box
 from yolo.utils.torch_utils import select_device, load_classifier, time_synchronized
 from core import trips_management
+import csv
 
 app = Flask(__name__)
 current_thread_id = 0
@@ -133,9 +134,10 @@ def detect_async(opt, file_save, save_img=False):
                 for *xyxy, conf, cls in reversed(det):
                     if save_txt:  # Write to file
                         xywh = (xyxy2xywh(torch.tensor(xyxy).view(1, 4)) / gn).view(-1).tolist()  # normalized xywh
-                        line = (cls, *xywh, coor_lat, coor_long,conf) if opt.save_conf else (cls, coor_lat, coor_long,*xywh)  # label format
-                        with open(txt_path + '.txt', 'a') as f:
-                            f.write(('%g ' * len(line)).rstrip() % line + str(coor_lat) + str(coor_long)+'\n')
+                        line = (int(cls) ,*xywh, coor_lat, coor_long)  # label format
+                        with open(file_save, 'a', newline='') as f:
+                            writer = csv.writer(f)
+                            writer.writerow(line)
 
                     if save_img or view_img:  # Add bbox to image
                         label = f'{names[int(cls)]} {conf:.2f}'
@@ -194,52 +196,53 @@ def result():
 
 
 @app.route('/detect', methods=['GET'])
-def detect(id):
+def detect():
     if(exit_detect_event.is_set()):
-        exit_detect_event.clear()
-        parser = argparse.ArgumentParser()
-        parser.add_argument('--weights', nargs='+', type=str, default='yolov5s.pt', help='model.pt path(s)')
-        parser.add_argument('--source', type=str, default='0', help='source')  # file/folder, 0 for webcam
-        parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
-        parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
-        parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
-        parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
-        parser.add_argument('--view-img', action='store_true', help='display results')
-        parser.add_argument('--save-txt', action='store_true', default=True, help='save results to *.txt')
-        parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
-        parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --class 0, or --class 0 2 3')
-        parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
-        parser.add_argument('--augment', action='store_true', help='augmented inference')
-        parser.add_argument('--update', action='store_true', help='update all models')
-        parser.add_argument('--project', default='runs/detect', help='save results to project/name')
-        parser.add_argument('--name', default='exp', help='save results to project/name')
-        parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
-        opt = parser.parse_args()
-        print(opt)
-        check_requirements()
-        file_save = id + '.csv'
-        with torch.no_grad():
-            if opt.update:  # update all models (to fix SourceChangeWarning)
-                for opt.weights in ['yolov5s.pt', 'yolov5m.pt', 'yolov5l.pt', 'yolov5x.pt']:
-                    thread_detect = threading.Thread(target=detect_async,args=(opt, file_save,))
-                    strip_optimizer(opt.weights)
-            else:
-                thread_detect = threading.Thread(target=detect_async, args=(opt, file_save,))
-                
-        
-        thread_detect.start()
-        return 'done'
-    else:
-        return 'exists'
+        id = request.args.get('id', default = None)
+        if id and id in all_trips:
+            exit_detect_event.clear()
+            parser = argparse.ArgumentParser()
+            parser.add_argument('--weights', nargs='+', type=str, default='yolov5s.pt', help='model.pt path(s)')
+            parser.add_argument('--source', type=str, default='0', help='source')  # file/folder, 0 for webcam
+            parser.add_argument('--img-size', type=int, default=640, help='inference size (pixels)')
+            parser.add_argument('--conf-thres', type=float, default=0.25, help='object confidence threshold')
+            parser.add_argument('--iou-thres', type=float, default=0.45, help='IOU threshold for NMS')
+            parser.add_argument('--device', default='', help='cuda device, i.e. 0 or 0,1,2,3 or cpu')
+            parser.add_argument('--view-img', action='store_true', help='display results')
+            parser.add_argument('--save-txt', action='store_true', default=True, help='save results to *.txt')
+            parser.add_argument('--save-conf', action='store_true', help='save confidences in --save-txt labels')
+            parser.add_argument('--classes', nargs='+', type=int, help='filter by class: --class 0, or --class 0 2 3')
+            parser.add_argument('--agnostic-nms', action='store_true', help='class-agnostic NMS')
+            parser.add_argument('--augment', action='store_true', help='augmented inference')
+            parser.add_argument('--update', action='store_true', help='update all models')
+            parser.add_argument('--project', default='runs/detect', help='save results to project/name')
+            parser.add_argument('--name', default='exp', help='save results to project/name')
+            parser.add_argument('--exist-ok', action='store_true', help='existing project/name ok, do not increment')
 
+            opt = parser.parse_args()
+            print(opt)
+            check_requirements(file= 'yolo/requirements.txt')
+            file_save = TRIPS_FOLDER + '/' + id +'.csv'
+            with torch.no_grad():
+                if opt.update:  # update all models (to fix SourceChangeWarning)
+                    for opt.weights in ['yolov5s.pt', 'yolov5m.pt', 'yolov5l.pt', 'yolov5x.pt']:
+                        thread_detect = threading.Thread(target=detect_async,args=(opt, file_save,))
+                        strip_optimizer(opt.weights)
+                else:
+                    thread_detect = threading.Thread(target=detect_async, args=(opt, file_save,))
+
+            thread_detect.start()
+            return jsonify({'message':'done'})
+        else:
+            return return_error('The trip does not exist', 404)
 
 @app.route('/stop_detect', methods=['GET'])
 def stop_detect():
     if(not exit_detect_event.is_set()):
         exit_detect_event.set()
-        return 'done'
+        return jsonify({'message':'done'})
     else:
-        return 'no detection executing'
+        return return_error('no detection executing', 404) 
 
 @app.route('/trips', methods=['GET'])
 def list_trips():
