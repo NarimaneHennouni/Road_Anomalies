@@ -70,7 +70,10 @@ def stop_detect():
 
 @app.route('/trips', methods=['GET'])
 def list_trips():
-    return jsonify(all_trips)
+    results = []
+    for key in all_trips:
+        results.append(all_trips[key])
+    return jsonify(results)
 
 
 @app.route('/trip/create', methods=['PUT'])
