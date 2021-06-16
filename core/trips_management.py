@@ -2,7 +2,8 @@ import os
 from datetime import datetime
 import csv
 import pandas as pd
-from flask import send_file
+from flask import send_file, Response
+import urllib.request
 
 def trip_name_to_numbers(file):
     file = file[:-4]
@@ -51,10 +52,10 @@ def get_stats(TRIPS_FOLDER, id):
     except FileNotFoundError: 
         return False
    
-def get_image(IMAGES_FOLDER, id, detection_number):
+def get_image(IMAGES_FOLDER, id, detection_number, app):
     filename = IMAGES_FOLDER + '/' + id + '/' + detection_number + '.jpg'
     try:
-        return send_file(filename, mimetype='detection/image')
+        return app.send_static_file(filename)
     except FileNotFoundError:
         return False
       

@@ -6,7 +6,7 @@ import threading
 
 from core import trips_management
 
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/static')
 current_thread_id = 0
 
 #Trigger to indecate control the detection script
@@ -126,7 +126,7 @@ def get_image():
     detection_number = request.args.get('detection_number', default = None)
     if id and detection_number:
         if id in all_trips:
-            image = trips_management.get_image(IMAGES_FOLDER, id, detection_number)
+            image = trips_management.get_image(IMAGES_FOLDER, id, detection_number, app)
             if image:
                 return image
             else:
