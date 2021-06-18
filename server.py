@@ -1,5 +1,7 @@
 import sys, os
 sys.path.append('./yolo')
+sys.path.insert(4,'/usr/local/lib/python3.6/dist-packages')
+print(sys.path)
 
 from flask import Flask, request, jsonify
 #from yolo.detect import *
@@ -33,7 +35,7 @@ exit_detect_event.set()
 # get all trips
 TRIPS_FOLDER = './trips_data'
 all_trips = trips_management.read_all_trips(TRIPS_FOLDER)
-IMAGES_FOLDER = './trip_images_save'
+IMAGES_FOLDER = 'trip_images_save'
 
 #initialize position global variables
 coor_lat = 0
@@ -48,10 +50,12 @@ def return_error(msg, code):
                     'message' : msg
                 }),code
 
-def detect_async(opt, file_save, img_save_path = None, save_img=True):
+def detect_async(opt, file_save, img_save_path = None, save_img=True, jetson = True):
     source, weights, view_img, save_txt, imgsz = opt.source, opt.weights, opt.view_img, opt.save_txt, opt.img_size
     webcam = source.isnumeric() or source.endswith('.txt') or source.lower().startswith(
         ('rtsp://', 'rtmp://', 'http://'))    
+    if jetson:
+        view_img = False
 
     if save_img:
         print(img_save_path)
@@ -80,7 +84,7 @@ def detect_async(opt, file_save, img_save_path = None, save_img=True):
     if webcam:
         view_img = check_imshow()
         cudnn.benchmark = True  # set True to speed up constant image size inference
-        dataset = LoadStreams(source, img_size=imgsz, stride=stride)
+        dataset = LoadStreams(source, img_size=imgsz, stride=stride, jetson = jetson)
     else:
         save_img = True
         dataset = LoadImages(source, img_size=imgsz, stride=stride)
@@ -159,6 +163,8 @@ def detect_async(opt, file_save, img_save_path = None, save_img=True):
                 cv2.waitKey(1)  # 1 millisecond
         
         if(exit_detect_event.is_set()):
+            vid_cap.release()
+            cv2.desstatictroyAllWindows()
             break
 
     print(f'Done. ({time.time() - t0:.3f}s)')
@@ -186,6 +192,7 @@ def detect():
     if(exit_detect_event.is_set()):
         id = request.args.get('id', default = None)
         save_img = request.args.get('save_img', default = False)
+        jesave_img = request.args.get('jesave_img', default = True)
         if id and id in all_trips:
             exit_detect_event.clear()
             parser = argparse.ArgumentParser()
@@ -210,14 +217,14 @@ def detect():
             print(opt)
             check_requirements(file= 'yolo/requirements.txt')
             file_save = TRIPS_FOLDER + '/' + id +'.csv'
-            img_save_path = IMAGES_FOLDER + '/' + id
+            img_save_path = 'static/' + IMAGES_FOLDER + '/' + id
             with torch.no_grad():
                 if opt.update:  # update all models (to fix SourceChangeWarning)
                     for opt.weights in ['yolov5s.pt', 'yolov5m.pt', 'yolov5l.pt', 'yolov5x.pt']:
-                        thread_detect = threading.Thread(target=detect_async,args=(opt, file_save, img_save_path, save_img,))
+                        thread_detect = threading.Thread(target=detect_async,args=(opt, file_save, img_save_path, save_img, jesave_img))
                         strip_optimizer(opt.weights)
                 else:
-                    thread_detect = threading.Thread(target=detect_async, args=(opt, file_save, img_save_path, save_img,)) 
+                    thread_detect = threading.Thread(target=detect_async, args=(opt, file_save, img_save_path, save_img, jesave_img)) 
 
             thread_detect.start()
             return jsonify({'message':'done'})
@@ -273,10 +280,7 @@ def trip_stats():
     if id:
         stats = trips_management.get_stats(TRIPS_FOLDER, id)
         if stats:
-            return jsonify(
-                {
-                    'data' : stats
-                })
+            return jsonify(stats)
         else:
             return return_error('The trip does not exist', 404)
     return return_error('You have to provide an id', 404)
@@ -287,7 +291,7 @@ def get_image():
     detection_number = request.args.get('detection_number', default = None)
     if id and detection_number:
         if id in all_trips:
-            image = trips_management.get_image(IMAGES_FOLDER, id, detection_number)
+            image = trips_management.get_image(IMAGES_FOLDER, id, detection_number, app)
             if image:
                 return image
             else:

@@ -1,3 +1,4 @@
+from jetson_server import result
 import os 
 from datetime import datetime
 import csv
@@ -47,15 +48,34 @@ def delete_trip(TRIPS_FOLDER, id):
 
 def get_stats(TRIPS_FOLDER, id):
     try:
-        df = pd.read_csv(TRIPS_FOLDER + '/' + id + '.csv')  
-        return list(df.T.to_dict().values())  
+        df = pd.read_csv(TRIPS_FOLDER + '/' + id + '.csv')
+        list_of_detections = list(df.T.to_dict().values())
+        results = {}
+        max = 0
+        for det in list_of_detections:
+            if det['class'] in results:
+                results[int(det['class'])] += 1
+            else:
+                results[int(det['class'])] = 1
+            if det['class'] > max: max = det['class'] 
+        
+        result_list = [0 for i in range(int(max+1))]
+
+        for key, value in results.items():
+            result_list[key] = value
+
+        return {
+            'data' : list_of_detections,
+            'counts': result_list
+        }
     except FileNotFoundError: 
         return False
    
 def get_image(IMAGES_FOLDER, id, detection_number, app):
     filename = IMAGES_FOLDER + '/' + id + '/' + detection_number + '.jpg'
     try:
-        return app.send_static_file(filename)
+        app.send_static_file(filename)
+        return 'static/' + IMAGES_FOLDER + '/' + id + '/' + detection_number + '.jpg'
     except FileNotFoundError:
         return False
       
