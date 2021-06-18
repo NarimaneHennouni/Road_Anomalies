@@ -1,4 +1,3 @@
-from jetson_server import result
 import os 
 from datetime import datetime
 import csv

@@ -164,7 +164,7 @@ def detect_async(opt, file_save, img_save_path = None, save_img=True, jetson = T
         
         if(exit_detect_event.is_set()):
             vid_cap.release()
-            cv2.desstatictroyAllWindows()
+            cv2.destroyAllWindows()
             break
 
     print(f'Done. ({time.time() - t0:.3f}s)')

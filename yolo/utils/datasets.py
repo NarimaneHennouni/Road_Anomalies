@@ -305,8 +305,9 @@ class LoadStreams:  # multiple IP or RTSP cameras
                 cap = cv2.VideoCapture(gstreamer_pipeline(flip_method=2))
             else:
                 cap = cv2.VideoCapture(eval(s) if s.isnumeric() else s)
-            self.cap = cap
+            cap = cv2.VideoCapture(eval(s) if s.isnumeric() else s)
             assert cap.isOpened(), f'Failed to open {s}'
+            self.cap = cap
             w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             fps = cap.get(cv2.CAP_PROP_FPS) % 100
